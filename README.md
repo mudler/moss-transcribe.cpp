@@ -54,8 +54,8 @@ Inference time (one-time model load excluded), warm run. Both engines emit the i
 
 Two honest caveats:
 
-- **RTF grows with audio length.** The decode is autoregressive over a context that grows with the audio (more audio tokens, a longer transcript), so per-second cost rises with duration. This is inherent to the model, and it affects the reference the same way. For hour-long audio on CPU you are looking at a long run for either engine, the reference model targets GPU (its published single-H100 numbers are RTF 0.02 to 0.12). GPU support here is on the roadmap (see below).
-- **These are the F32 CPU numbers.** F16 and quantization (q8_0/q6_k/q5_k/q4_k) are available now and cut the model from 3.4 GB down to 511 MB with the transcript still byte-identical through q5_k (see [Quantization](#quantization)); the ggml GPU backends (CUDA, Metal, Vulkan) are the next milestone. The headline wins are correctness (bit-exact), portability (no Python/PyTorch/CUDA), a real CPU speedup over PyTorch, and now much smaller quantized models.
+- **RTF grows with audio length.** The decode is autoregressive over a context that grows with the audio (more audio tokens, a longer transcript), so per-second cost rises with duration. This is inherent to the model, and it affects the reference the same way. For hour-long audio on CPU you are looking at a long run for either engine, the reference model targets GPU. moss-transcribe.cpp runs on GPU too (see below): CUDA is verified bit-exact on NVIDIA Blackwell, where it is roughly on par with PyTorch.
+- **These are the F32 CPU numbers.** F16 and quantization (q8_0/q6_k/q5_k/q4_k) are available now and cut the model from 3.4 GB down to 511 MB with the transcript still byte-identical through q5_k (see [Quantization](#quantization)). The ggml GPU backends work too: CUDA is verified bit-exact on an NVIDIA Blackwell GPU and runs roughly on par with PyTorch there (full numbers in [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md)). The headline wins are correctness (bit-exact), portability (no Python/PyTorch/CUDA at inference), a real CPU speedup over PyTorch, and much smaller quantized models.
 
 Full methodology and the reproducible harness are in [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md).
 
@@ -148,7 +148,7 @@ Quantization is a **speed** win as well as a size win: the autoregressive decode
 ./build/moss-transcribe info models/moss-transcribe-f32.gguf
 ```
 
-The output is the raw model transcript, `[start][Sxx]text[end]` segments concatenated into one stream. Parsing it into structured `{start, end, speaker, text}` segments and exporting SRT/ASS/JSON subtitles (the speaker-aware post-processing the reference ships) is the next milestone.
+The default output is the raw model transcript, `[start][Sxx]text[end]` segments concatenated into one stream. Pass `--format srt`, `--format ass`, or `--format json` to parse it into structured `{start, end, speaker, text}` segments and export subtitles with the reference's speaker-aware merge and styling (`--format text` is the raw stream, the default). Logs go to stderr, so `--format json > out.json` is clean.
 
 Thread count defaults to all cores, which for this model is usually not optimal. Set `MTD_THREADS` to tune it (8 is a good default on a 20-core box); the decode is bandwidth bound, so fewer busy threads often beat more.
 
@@ -191,8 +191,7 @@ For a production deployment (an OpenAI-compatible `/v1/audio/transcriptions` end
 
 ## Roadmap
 
-- **Subtitle and diarization export.** Parse the transcript into `{start, end, speaker, text}` and export SRT/ASS/JSON with the speaker-aware merge and styling the reference ships.
-- **GPU backends.** CUDA, Metal, and Vulkan through ggml, with the log-mel front end on-device. This is the path to fast hour-long transcription.
+- **GPU flash-attention.** CUDA is verified bit-exact on Blackwell and on par with PyTorch; the decoder attention still uses a manual softmax + matmul rather than ggml's CUDA `flash_attn_ext`, which is the main remaining GPU headroom (long-context throughput). Metal/Vulkan/HIP compile through the same flags.
 - **Flat C-API and LocalAI backend.** A `libmoss_transcribe.so` behind a stable C ABI, dlopened by a LocalAI `moss-transcribe-cpp` backend.
 
 ---

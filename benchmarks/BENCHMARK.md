@@ -40,4 +40,17 @@ Inference time excludes the one-time model load (about 1.4 s for the mmap'd F32 
 
 - **RTF grows with audio length** for both engines. The decode is autoregressive over a context that grows with the audio (more audio tokens plus a longer transcript, and attention cost grows with the sequence), so per-second cost rises with duration. moss-transcribe.cpp stays faster than PyTorch across the range, but neither is suited to hour-long audio on CPU. The reference model targets GPU (its published single-H100 figures are RTF 0.02 to 0.12); ggml GPU backends are on the roadmap.
 - **Threads.** The win is largest around 8 threads. At 20 threads the same work is slower (bandwidth contention and thread-launch overhead dominate a decode that is not compute bound), which is why the default-all-cores setting is not optimal and `MTD_THREADS` is exposed.
-- These are the **F32** numbers. Quantized GGUFs (F16, q8_0, q6_k, q5_k, q4_k) are available now via the converter and the CLI `quantize` command, cutting the model from 3.4 GB to as little as 511 MB with the transcript byte-identical through q5_k (q4_k is word-identical, one timestamp off by 0.02 s). See the [Quantization table](../README.md#quantization). GPU backends will cut time further.
+## GPU (NVIDIA Blackwell, Jetson Thor)
+
+Built with `-DMT_GGML_CUDA=ON`; the backend auto-selects the GPU. The **GPU transcript is byte-identical to the CPU output and to the reference** (verified on 11 s and 132 s). Inference-only (excludes the one-time model load and VRAM upload), moss-transcribe.cpp f16 vs the reference PyTorch bf16 on the same GPU (CUDA 13, torch 2.12+cu130):
+
+| Audio | moss-transcribe.cpp (ggml f16) | PyTorch (bf16) |
+| ----- | ------------------------------ | -------------- |
+| 11 s  | 2.58 s (RTF 0.235)             | 2.75 s (RTF 0.250) |
+| 132 s | ~46 s (RTF 0.35)               | 40.4 s (RTF 0.31)  |
+
+On GPU the two engines are roughly **on par**: moss-transcribe.cpp is marginally faster on short clips, PyTorch a bit faster on long ones (its attention scales better with the growing context). This is unlike CPU, where moss-transcribe.cpp is clearly faster (1.6 to 2.2x). The GPU win here is portability and bit-exactness, not raw throughput. The main remaining GPU headroom is flash-attention: the decoder attention currently uses a manual softmax + matmul rather than ggml's CUDA `flash_attn_ext`, which would help the long-context case.
+
+## Notes on precision
+
+- These are the **F32** CPU numbers. Quantized GGUFs (F16, q8_0, q6_k, q5_k, q4_k) are available now via the converter and the CLI `quantize` command, cutting the model from 3.4 GB to as little as 511 MB with the transcript byte-identical through q5_k (q4_k is word-identical, one timestamp off by 0.02 s). See the [Quantization table](../README.md#quantization). GPU backends will cut time further.
