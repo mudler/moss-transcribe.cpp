@@ -24,3 +24,6 @@ set_tests_properties(test_audio_path_e2e PROPERTIES LABELS "model")
 
 mt_add_test(test_tokenizer)
 set_tests_properties(test_tokenizer PROPERTIES LABELS "model")
+
+mt_add_test(test_audio_span)
+set_tests_properties(test_audio_span PROPERTIES LABELS "model")

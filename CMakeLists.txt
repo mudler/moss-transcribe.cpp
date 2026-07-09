@@ -31,6 +31,7 @@ set(MT_SRC
   src/whisper_encoder.cpp
   src/audio_adaptor.cpp
   src/tokenizer.cpp
+  src/audio_span.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})

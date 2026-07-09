@@ -99,6 +99,18 @@ inline bool is_letter_cp(uint32_t cp) {
     // CJK Symbols and Punctuation
     if (cp >= 0x3000 && cp <= 0x303F) return false;
 
+    // Halfwidth and Fullwidth Forms (U+FF00..U+FFEF). Only the fullwidth Latin
+    // letters and halfwidth katakana/hangul are Letters; the rest are fullwidth
+    // punctuation (（），！ etc.), fullwidth digits, and symbols. Treating the
+    // punctuation as Letter would wrongly bind it to adjacent words in the
+    // Qwen2 pre-tokenizer.
+    if (cp >= 0xFF00 && cp <= 0xFFEF) {
+        if (cp >= 0xFF21 && cp <= 0xFF3A) return true;  // fullwidth A-Z
+        if (cp >= 0xFF41 && cp <= 0xFF5A) return true;  // fullwidth a-z
+        if (cp >= 0xFF66 && cp <= 0xFFDC) return true;  // halfwidth katakana/hangul
+        return false;                                   // punctuation / digits / symbols
+    }
+
     // Common emoji blocks
     if (cp >= 0x1F300 && cp <= 0x1F9FF) return false;
     if (cp >= 0x1FA00 && cp <= 0x1FAFF) return false;
