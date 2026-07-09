@@ -1,0 +1,19 @@
+{
+  "audio": "jfk.wav",
+  "audio_s": 11.0,
+  "transcript": "[0.28][S01] And so, my fellow Americans,[2.32][3.22][S01] ask not what your country can do for you,[7.71][8.12][S01] ask what you can do for your country.[10.59]",
+  "ggml_infer_s": 6.5,
+  "torch_infer_s": 10.5,
+  "ggml_rtf": 0.59,
+  "torch_rtf": 0.96,
+  "speedup": 1.62,
+  "speedup_range": "1.6 to 1.8x",
+  "ram_ggml_mb": 4082,
+  "ram_torch_mb": 5989,
+  "ram_ratio": 1.47,
+  "threads": 8,
+  "dtype": "F32",
+  "cpu": "20-core x86",
+  "parity": "component parity cosine 1.000, transcript byte-identical",
+  "stat": "warm, isolated, inference time (model load excluded), MTD_THREADS=8 vs torch.set_num_threads(8). RAM = Maximum resident set size (/usr/bin/time -v). Speedup range 1.6 to 1.8x measured across 11s/44s/132s (see benchmarks/BENCHMARK.md)."
+}

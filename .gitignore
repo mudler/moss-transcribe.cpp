@@ -3,3 +3,4 @@
 *.gguf
 __pycache__/
 .venv/
+benchmarks/demo/out/

@@ -8,9 +8,9 @@
 
 moss-transcribe.cpp is a from-scratch C++17 inference port of [OpenMOSS MOSS-Transcribe-Diarize](https://github.com/OpenMOSS/MOSS-Transcribe-Diarize), built on [ggml](https://github.com/ggml-org/ggml). It does joint long-form transcription, speaker diarization, and timestamping in a single pass, on CPU (and on GPU through ggml's backends), with no Python, PyTorch, or CUDA toolkit at inference time. Everything lives in one self-contained GGUF, and the output is bit-for-bit identical to the reference model: every component is validated at cosine 1.0 against the genuine PyTorch model, and the end-to-end transcript matches it exactly. On CPU it is about 1.8x faster than the reference PyTorch runtime on the same audio and threads.
 
-![moss-transcribe.cpp vs PyTorch on CPU: identical transcript, 1.6 to 1.8x faster](benchmarks/media/rtf_vs_length.png)
+![moss-transcribe.cpp vs PyTorch on CPU: identical transcript, moss-transcribe.cpp finishes first](benchmarks/media/moss_transcribe_race.gif)
 
-> Same audio, same F32 weights, same 8 threads, byte-identical transcript: moss-transcribe.cpp stays well under real time on CPU where PyTorch does not ([full benchmarks](benchmarks/BENCHMARK.md)).
+> The same audio, side by side: the identical timestamped, speaker-labelled transcript, moss-transcribe.cpp (ggml CPU) gets there first, 1.6 to 1.8x faster than PyTorch and on about 1.5x less RAM ([full benchmarks](benchmarks/BENCHMARK.md), [square cut for social](benchmarks/media/moss_transcribe_race_square.gif)).
 
 The model emits a compact, time-aligned, speaker-labelled transcript in one autoregressive stream, for example:
 
@@ -49,6 +49,8 @@ moss-transcribe.cpp is faster than the reference PyTorch runtime on CPU, on the 
 | 132 s | 102.8 s (RTF 0.78)  | 162.1 s (RTF 1.23)  | 1.58x   |
 
 Inference time (one-time model load excluded), warm run. Both engines emit the identical transcript. moss-transcribe.cpp stays under real time (RTF below 1.0) across the range; PyTorch crosses 1.0 by 132 s.
+
+![RTF vs audio length: moss-transcribe.cpp vs PyTorch on CPU](benchmarks/media/rtf_vs_length.png)
 
 Two honest caveats:
 
