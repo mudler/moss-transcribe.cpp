@@ -14,6 +14,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <thread>
 
 namespace mt {
 
@@ -112,9 +113,16 @@ void init() {
     if (g_backend) {
         const char* name = ggml_backend_name(g_backend);
         g_name = name ? name : "(unnamed)";
-        // Hint the CPU backend to use all available threads.
+        // Use all available cores by default (ggml's "0" actually means the
+        // GGML_DEFAULT_N_THREADS=4 fallback, not all cores). Override with the
+        // MTD_THREADS env var (useful for matched-thread benchmarking).
         if (ggml_backend_is_cpu(g_backend)) {
-            ggml_backend_cpu_set_n_threads(g_backend, 0);  // 0 = auto
+            int nt = 0;
+            if (const char* e = std::getenv("MTD_THREADS")) nt = std::atoi(e);
+            if (nt <= 0) nt = (int) std::thread::hardware_concurrency();
+            if (nt <= 0) nt = 4;
+            ggml_backend_cpu_set_n_threads(g_backend, nt);
+            MT_LOGI("CPU threads: %d", nt);
         }
         // Allocator for graph intermediates. ggml_gallocr_new takes a
         // single buffer type; we use the backend's default.
