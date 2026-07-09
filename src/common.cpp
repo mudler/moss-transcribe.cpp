@@ -54,8 +54,9 @@ void log(mt_log_level lvl, const char* fmt, ...) {
     if (s.cb) {
         s.cb(lvl, buf, s.user);
     } else {
-        std::fprintf(lvl <= MT_LOG_WARN ? stderr : stdout,
-                     "[mt %s] %s\n", lvl_str(lvl), buf);
+        // All diagnostics go to stderr; stdout carries only program output
+        // (the transcript / subtitle body), so `--format json > out.json` is clean.
+        std::fprintf(stderr, "[mt %s] %s\n", lvl_str(lvl), buf);
     }
 }
 

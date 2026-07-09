@@ -36,3 +36,8 @@ set_tests_properties(test_fusion PROPERTIES LABELS "model")
 
 mt_add_test(test_generate_e2e)
 set_tests_properties(test_generate_e2e PROPERTIES LABELS "model")
+
+# M6: subtitle + diarization export -- model-INDEPENDENT (no LABELS "model").
+mt_add_test(test_transcript_parser)
+mt_add_test(test_subtitle_postprocess)
+mt_add_test(test_subtitle_export)
