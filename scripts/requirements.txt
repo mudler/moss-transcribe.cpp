@@ -1,0 +1,10 @@
+torch>=2.8
+transformers>=5.0.0,<6.0.0
+safetensors>=0.6.2
+gguf
+numpy>=1.26,<3
+librosa>=0.11.0
+soundfile>=0.12
+protobuf
+sentencepiece
+accelerate>=1.0
