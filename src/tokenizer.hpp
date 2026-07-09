@@ -43,8 +43,8 @@ public:
     // recognized and emitted as their reserved id (no BPE applied).
     std::vector<int32_t> encode(const std::string& text) const;
 
-    // Decode ids back to UTF-8 text. Special tokens are emitted as their
-    // text form.
+    // Decode ids back to UTF-8 text. Special and control tokens (token_type
+    // 1/3) are skipped, matching skip_special_tokens=True semantics.
     std::string decode(const std::vector<int32_t>& ids) const;
 
     int32_t bos_id() const { return bos_id_; }

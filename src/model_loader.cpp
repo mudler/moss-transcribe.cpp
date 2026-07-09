@@ -154,7 +154,7 @@ void ModelLoader::read_config() {
 
     // Audio-span.
     cfg_.audio_tokens_per_second   = get_f32("mtd.audio_tokens_per_second", 12.5f);
-    cfg_.time_marker_every_seconds = (int) get_u32("mtd.time_marker_every_seconds", 2);
+    cfg_.time_marker_every_seconds = (int) get_u32("mtd.time_marker_every_seconds", 5);
     cfg_.enable_time_marker        = get_bool("mtd.enable_time_marker", true);
 
     // Generation.

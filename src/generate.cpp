@@ -29,6 +29,14 @@ std::vector<float> fuse_embeds(ModelLoader& m,
                 (long long)tok->ne[0], hidden);
         return out;
     }
+    // Raw F32 reads below assume the tensor is GGML_TYPE_F32. token_embd is
+    // huge (~155M elems) and is never promoted to F32, so a non-F32 (f16/quant)
+    // GGUF would make ggml_backend_tensor_get read garbage. Fail loud instead.
+    if (tok->type != GGML_TYPE_F32) {
+        MT_LOGE("fuse_embeds: token_embd type %d != GGML_TYPE_F32 (F32 GGUF required)",
+                (int)tok->type);
+        return out;
+    }
     const int64_t vocab = tok->ne[1];
     const size_t  seq   = input_ids.size();
     out.resize(seq * (size_t)hidden);
@@ -78,6 +86,13 @@ std::vector<float> embed_token(ModelLoader& m, int32_t t, int hidden) {
     if (!tok) { MT_LOGE("embed_token: missing token_embd.weight"); return out; }
     if ((int)tok->ne[0] != hidden) {
         MT_LOGE("embed_token: token_embd hidden %lld != %d", (long long)tok->ne[0], hidden);
+        return out;
+    }
+    // Raw F32 read below assumes GGML_TYPE_F32; token_embd is never promoted to
+    // F32, so a non-F32 GGUF would read garbage. Fail loud instead.
+    if (tok->type != GGML_TYPE_F32) {
+        MT_LOGE("embed_token: token_embd type %d != GGML_TYPE_F32 (F32 GGUF required)",
+                (int)tok->type);
         return out;
     }
     const int64_t vocab = tok->ne[1];
