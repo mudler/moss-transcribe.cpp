@@ -25,6 +25,7 @@ set(MT_SRC
   src/common.cpp
   src/backend.cpp
   src/model_loader.cpp
+  src/audio_io.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})

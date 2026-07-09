@@ -7,3 +7,5 @@ macro(mt_add_test name)
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endmacro()
+
+mt_add_test(test_audio_io)
