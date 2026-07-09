@@ -21,3 +21,18 @@ set_tests_properties(test_audio_adaptor PROPERTIES LABELS "model")
 
 mt_add_test(test_audio_path_e2e)
 set_tests_properties(test_audio_path_e2e PROPERTIES LABELS "model")
+
+mt_add_test(test_tokenizer)
+set_tests_properties(test_tokenizer PROPERTIES LABELS "model")
+
+mt_add_test(test_audio_span)
+set_tests_properties(test_audio_span PROPERTIES LABELS "model")
+
+mt_add_test(test_qwen3_decoder)
+set_tests_properties(test_qwen3_decoder PROPERTIES LABELS "model")
+
+mt_add_test(test_fusion)
+set_tests_properties(test_fusion PROPERTIES LABELS "model")
+
+mt_add_test(test_generate_e2e)
+set_tests_properties(test_generate_e2e PROPERTIES LABELS "model")
