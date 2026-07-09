@@ -15,6 +15,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 import numpy as np
@@ -30,6 +31,50 @@ DEFAULT_PROMPT = (
     "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
     "并在段末标注结束时间戳，以清晰标明该段语音范围。"
 )
+
+
+# --------------------------------------------------------------------------
+# Quantization policy.
+#
+# Quantize ONLY the large 2-D weights fed directly into ggml_mul_mat (ggml
+# dequantizes f16/q8_0 src0 on the fly). Everything else -- biases, norms, the
+# conv stem, pos_embd, mel_filters -- stays F32 (excluded because it does not
+# match the allowlist). `token_embd.weight` is quantizable: Q0 made the embed
+# lookup dtype-agnostic (ggml_get_rows) and the tied lm_head goes through
+# ggml_mul_mat. See .superpowers/sdd/q1-interface-notes.md.
+# --------------------------------------------------------------------------
+_QUANTIZABLE_PATTERNS = [
+    r"^token_embd\.weight$",                          # embeddings + tied lm_head
+    r"^qwen3\.blk\.\d+\.attn_[qkvo]\.weight$",         # decoder attention projections
+    r"^qwen3\.blk\.\d+\.ffn_(gate|up|down)\.weight$",  # decoder SwiGLU
+    r"^enc\.blk\.\d+\.attn_(q|k|v|out)\.w$",           # whisper encoder attention (.w only)
+    r"^enc\.blk\.\d+\.ffn_(1|2)\.w$",                  # whisper encoder FFN
+    r"^adaptor\.(fc1|fc2)\.w$",                        # VQAdaptor linears
+]
+_QRE = [re.compile(p) for p in _QUANTIZABLE_PATTERNS]
+
+
+def should_quantize(name, ggml_ne, dtype):
+    """Return the ggml quantization type for ``name`` given the requested dtype.
+
+    ``ggml_ne`` is the reverse of the numpy shape, so ``ggml_ne[0]`` is the
+    leading/contraction axis q8_0 blocks along (block size 32). Returns None
+    (keep F32) unless the tensor is on the linear-weight allowlist, is at least
+    2-D with both dims >= 32, and (for q8_0) has a block-aligned leading dim.
+    """
+    if dtype == "f32":
+        return None
+    if not any(rx.match(name) for rx in _QRE):
+        return None
+    if len(ggml_ne) < 2 or min(ggml_ne[0], ggml_ne[1]) < 32:
+        return None
+    if dtype == "f16":
+        return gguf.GGMLQuantizationType.F16
+    if dtype == "q8_0":
+        if ggml_ne[0] % 32 != 0:
+            return None
+        return gguf.GGMLQuantizationType.Q8_0
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -274,10 +319,6 @@ def main():
     ap.add_argument("--dtype", choices=["f32", "f16", "q8_0"], default="f32")
     args = ap.parse_args()
 
-    if args.dtype != "f32":
-        print(f"[warn] --dtype {args.dtype} requested; this converter stores all "
-              f"tensors f32 (Phase 1 requirement).", file=sys.stderr)
-
     cfg = AutoConfig.from_pretrained(args.model_dir, trust_remote_code=True)
     fe = WhisperFeatureExtractor.from_pretrained(args.model_dir)
     with open(os.path.join(args.model_dir, "processor_config.json"), "r", encoding="utf-8") as fh:
@@ -301,6 +342,7 @@ def main():
 
     produced = set()
     unmapped = []
+    quantized = 0
     for hf_name, tensor in sd.items():
         gname = rename(hf_name)
         if gname is None:
@@ -308,8 +350,17 @@ def main():
         if gname.startswith("__UNMAPPED__:"):
             unmapped.append(hf_name)
             continue
-        arr = tensor.to(torch.float32).numpy()
-        w.add_tensor(gname, np.ascontiguousarray(arr))
+        arr = np.ascontiguousarray(tensor.to(torch.float32).numpy())
+        # ggml ne is the reverse of the numpy shape; ne[0] = leading axis.
+        ggml_ne = list(arr.shape)[::-1]
+        qtype = should_quantize(gname, ggml_ne, args.dtype)
+        if qtype is None:
+            w.add_tensor(gname, arr)  # F32
+        else:
+            raw = gguf.quantize(arr, qtype)
+            # gguf derives the element shape from the raw byte shape + raw_dtype.
+            w.add_tensor(gname, raw, raw_shape=raw.shape, raw_dtype=qtype)
+            quantized += 1
         produced.add(gname)
 
     # ------------------------------------------------------------------
@@ -340,7 +391,8 @@ def main():
     w.write_kv_data_to_file()
     w.write_tensors_to_file()
     w.close()
-    print(f"wrote {args.out} (+mel_filters, total {len(produced) + 1} tensors)")
+    print(f"wrote {args.out} (+mel_filters, total {len(produced) + 1} tensors, "
+          f"dtype={args.dtype}, quantized={quantized})")
 
 
 if __name__ == "__main__":
