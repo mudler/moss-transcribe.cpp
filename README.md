@@ -55,7 +55,7 @@ Inference time (one-time model load excluded), warm run. Both engines emit the i
 Two honest caveats:
 
 - **RTF grows with audio length.** The decode is autoregressive over a context that grows with the audio (more audio tokens, a longer transcript), so per-second cost rises with duration. This is inherent to the model, and it affects the reference the same way. For hour-long audio on CPU you are looking at a long run for either engine, the reference model targets GPU (its published single-H100 numbers are RTF 0.02 to 0.12). GPU support here is on the roadmap (see below).
-- **This is the F32 CPU build.** F16, quantization (q8_0/q6_k/q5_k/q4_k), and the ggml GPU backends (CUDA, Metal, Vulkan) are the next milestones. The headline win today is correctness (bit-exact), portability (no Python/PyTorch/CUDA), and a real CPU speedup over PyTorch.
+- **These are the F32 CPU numbers.** F16 and quantization (q8_0/q6_k/q5_k/q4_k) are available now and cut the model from 3.4 GB down to 511 MB with the transcript still byte-identical through q5_k (see [Quantization](#quantization)); the ggml GPU backends (CUDA, Metal, Vulkan) are the next milestone. The headline wins are correctness (bit-exact), portability (no Python/PyTorch/CUDA), a real CPU speedup over PyTorch, and now much smaller quantized models.
 
 Full methodology and the reproducible harness are in [`benchmarks/BENCHMARK.md`](benchmarks/BENCHMARK.md).
 
@@ -98,6 +98,34 @@ python3 scripts/convert_moss_transcribe_to_gguf.py models/hf -o models/moss-tran
 ```
 
 The converter embeds everything the loader needs (all dims, the Whisper mel filterbank, the Qwen2 tokenizer, the time-marker parameters, the default prompt) as GGUF metadata and tensors. Nothing is hardcoded in the C++ and no sidecar config or vocab file is shipped.
+
+### Quantization
+
+The converter emits F32, F16, and q8_0 directly. The K-quants (q6_k/q5_k/q4_k), which the Python `gguf` writer cannot produce, come from the CLI `quantize` command against an F32 GGUF:
+
+```sh
+# F16 and q8_0 from the converter
+python3 scripts/convert_moss_transcribe_to_gguf.py models/hf -o models/moss-transcribe-f16.gguf  --dtype f16
+python3 scripts/convert_moss_transcribe_to_gguf.py models/hf -o models/moss-transcribe-q8_0.gguf --dtype q8_0
+
+# K-quants (and q4_0/q5_0) from an F32 GGUF
+./build/moss-transcribe quantize models/moss-transcribe-f32.gguf models/moss-transcribe-q6_k.gguf q6_k
+./build/moss-transcribe quantize models/moss-transcribe-f32.gguf models/moss-transcribe-q5_k.gguf q5_k
+./build/moss-transcribe quantize models/moss-transcribe-f32.gguf models/moss-transcribe-q4_k.gguf q4_k
+```
+
+Only the large `ggml_mul_mat`-fed weights are quantized (the Qwen3 and Whisper attention/FFN projections, the adaptor linears, and the token embedding, 343 tensors). Norms, biases, the conv stem, positional embeddings, and the mel filterbank stay F32. Size and accuracy on the JFK sample (CPU, greedy):
+
+| dtype | size | vs f32 | transcript vs reference |
+| ----- | ---- | ------ | ----------------------- |
+| f32   | 3.4 GB | 100% | byte-identical (the parity gate) |
+| f16   | 1.8 GB | 50%  | byte-identical |
+| q8_0  | 942 MB | 27%  | byte-identical |
+| q6_k  | 733 MB | 21%  | byte-identical |
+| q5_k  | 619 MB | 18%  | byte-identical |
+| q4_k  | 511 MB | 15%  | word-identical (one timestamp off by 0.02 s) |
+
+F16 through q5_k reproduce the reference transcript exactly (greedy argmax is robust to the small weight noise); q4_k is word-for-word identical with a hair of timestamp drift. The GGUFs will be published to [mudler/moss-transcribe.cpp-gguf](https://huggingface.co/mudler/moss-transcribe.cpp-gguf).
 
 ---
 
@@ -158,7 +186,6 @@ For a production deployment (an OpenAI-compatible `/v1/audio/transcriptions` end
 ## Roadmap
 
 - **Subtitle and diarization export.** Parse the transcript into `{start, end, speaker, text}` and export SRT/ASS/JSON with the speaker-aware merge and styling the reference ships.
-- **F16 and quantization.** q8_0/q6_k/q5_k/q4_k GGUFs, near-lossless and much smaller.
 - **GPU backends.** CUDA, Metal, and Vulkan through ggml, with the log-mel front end on-device. This is the path to fast hour-long transcription.
 - **Flat C-API and LocalAI backend.** A `libmoss_transcribe.so` behind a stable C ABI, dlopened by a LocalAI `moss-transcribe-cpp` backend.
 
