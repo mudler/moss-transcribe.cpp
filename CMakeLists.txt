@@ -19,6 +19,14 @@ endforeach()
 set(GGML_NATIVE ON CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE ON CACHE BOOL "" FORCE)
 
+# For the shared build, ggml MUST be compiled as a static PIC library so it
+# links INTO libmoss-transcribe.so -- a LocalAI backend dlopen's the .so and
+# would die at runtime ("cannot open libggml.so") if ggml stayed external.
+if(MT_SHARED)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
+endif()
+
 add_subdirectory(third_party/ggml)
 
 set(MT_SRC
@@ -37,6 +45,7 @@ set(MT_SRC
   src/generate.cpp
   src/audio_encoder.cpp
   src/transcribe.cpp
+  src/moss_transcribe_capi.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})
