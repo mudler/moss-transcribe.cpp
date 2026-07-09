@@ -85,6 +85,8 @@ Use `-DGGML_NATIVE=OFF` for portable or CI builds. For the shared library (Local
 | `MT_GGML_VULKAN` | OFF | Forward GGML_VULKAN to the submodule |
 | `MT_GGML_HIP` | OFF | Forward GGML_HIP (ROCm) to the submodule |
 
+To build for a GPU, forward its flag and rebuild, e.g. CUDA: `cmake -B build-cuda -DMT_GGML_CUDA=ON && cmake --build build-cuda -j` (Metal/Vulkan/HIP analogously). The backend auto-selects the GPU when present (`MTD_DEVICE=cpu` forces CPU). `scripts/gpu_verify.sh <gguf> <wav> [cuda|metal|vulkan|hip]` builds, checks the GPU transcript is byte-identical to CPU, and reports GPU vs CPU speed. GPU parity and benchmarks are validated on real hardware (a build machine with the ggml GPU toolchain).
+
 ---
 
 ## Get the model
