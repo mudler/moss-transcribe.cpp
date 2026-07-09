@@ -9,3 +9,6 @@ macro(mt_add_test name)
 endmacro()
 
 mt_add_test(test_audio_io)
+
+mt_add_test(test_mel)
+set_tests_properties(test_mel PROPERTIES LABELS "model")
