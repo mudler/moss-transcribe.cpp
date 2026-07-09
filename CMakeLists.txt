@@ -23,6 +23,8 @@ add_subdirectory(third_party/ggml)
 
 set(MT_SRC
   src/common.cpp
+  src/backend.cpp
+  src/model_loader.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})
