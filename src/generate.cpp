@@ -71,4 +71,67 @@ std::vector<float> fuse_embeds(ModelLoader& m,
     return out;
 }
 
+std::vector<float> embed_token(ModelLoader& m, int32_t t, int hidden) {
+    std::vector<float> out;
+    if (hidden <= 0) return out;
+    struct ggml_tensor* tok = m.tensor("token_embd.weight");
+    if (!tok) { MT_LOGE("embed_token: missing token_embd.weight"); return out; }
+    if ((int)tok->ne[0] != hidden) {
+        MT_LOGE("embed_token: token_embd hidden %lld != %d", (long long)tok->ne[0], hidden);
+        return out;
+    }
+    const int64_t vocab = tok->ne[1];
+    if (t < 0 || t >= vocab) {
+        MT_LOGE("embed_token: id %d out of range [0,%lld)", (int)t, (long long)vocab);
+        return out;
+    }
+    out.resize((size_t)hidden);
+    const size_t src_off = (size_t)t * (size_t)hidden * sizeof(float);
+    ggml_backend_tensor_get(tok, out.data(), src_off, (size_t)hidden * sizeof(float));
+    return out;
+}
+
+// argmax with FIRST-index-on-tie semantics (torch argmax): strict >.
+static int argmax_first(const std::vector<float>& v) {
+    int best = 0;
+    for (int i = 1; i < (int)v.size(); ++i) if (v[i] > v[best]) best = i;
+    return best;
+}
+
+std::vector<int32_t> greedy_generate(Qwen3Decoder& dec, ModelLoader& m,
+                                     const std::vector<float>& fused, int seq,
+                                     int max_new, int eos) {
+    std::vector<int32_t> ids;
+    const int H = dec.hidden();
+    if (H <= 0 || seq <= 0 || max_new <= 0) {
+        MT_LOGE("greedy_generate: bad args (H=%d seq=%d max_new=%d)", H, seq, max_new);
+        return ids;
+    }
+
+    std::vector<float> hid;
+    if (!dec.prefill(fused, seq, &hid)) { MT_LOGE("greedy_generate: prefill failed"); return ids; }
+    if ((int)hid.size() < H * seq) { MT_LOGE("greedy_generate: short prefill hidden"); return ids; }
+
+    // Logits from the last prefilled position.
+    std::vector<float> last(hid.end() - H, hid.end());
+    std::vector<float> logits = dec.logits_from_hidden(last);
+    if (logits.empty()) { MT_LOGE("greedy_generate: logits failed"); return ids; }
+
+    ids.reserve((size_t)max_new);
+    for (;;) {
+        int t = argmax_first(logits);
+        ids.push_back(t);
+        if (t == eos) break;
+        if ((int)ids.size() >= max_new) break;
+
+        std::vector<float> emb = embed_token(m, t, H);
+        if (emb.empty()) { MT_LOGE("greedy_generate: embed failed @%d", t); break; }
+        std::vector<float> h1 = dec.decode_one(emb);
+        if ((int)h1.size() < H) { MT_LOGE("greedy_generate: decode_one failed"); break; }
+        logits = dec.logits_from_hidden(h1);
+        if (logits.empty()) { MT_LOGE("greedy_generate: logits failed"); break; }
+    }
+    return ids;
+}
+
 }  // namespace mt

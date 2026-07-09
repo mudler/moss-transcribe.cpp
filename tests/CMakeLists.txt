@@ -33,3 +33,6 @@ set_tests_properties(test_qwen3_decoder PROPERTIES LABELS "model")
 
 mt_add_test(test_fusion)
 set_tests_properties(test_fusion PROPERTIES LABELS "model")
+
+mt_add_test(test_generate_e2e)
+set_tests_properties(test_generate_e2e PROPERTIES LABELS "model")

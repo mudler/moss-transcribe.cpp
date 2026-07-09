@@ -35,6 +35,8 @@ set(MT_SRC
   src/qwen3.cpp
   src/qwen3_decoder.cpp
   src/generate.cpp
+  src/audio_encoder.cpp
+  src/transcribe.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})
