@@ -15,3 +15,6 @@ set_tests_properties(test_mel PROPERTIES LABELS "model")
 
 mt_add_test(test_whisper_encoder)
 set_tests_properties(test_whisper_encoder PROPERTIES LABELS "model")
+
+mt_add_test(test_audio_adaptor)
+set_tests_properties(test_audio_adaptor PROPERTIES LABELS "model")

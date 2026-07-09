@@ -29,6 +29,7 @@ set(MT_SRC
   src/fft.cpp
   src/mel.cpp
   src/whisper_encoder.cpp
+  src/audio_adaptor.cpp
 )
 if(MT_SHARED)
   add_library(moss-transcribe SHARED ${MT_SRC})
