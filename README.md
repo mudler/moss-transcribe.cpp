@@ -127,6 +127,8 @@ Only the large `ggml_mul_mat`-fed weights are quantized (the Qwen3 and Whisper a
 | q4_k  | 511 MB | 15%  | 3.81 s | 2.1x | word-identical (one timestamp off 0.02 s) |
 | q4_0  | 511 MB | 15%  | 3.57 s | 2.2x | word-identical (one timestamp off 0.07 s) |
 
+![Quantization ladder: size and speed by dtype, byte-exact through q5](benchmarks/media/quant_ladder.png)
+
 Quantization is a **speed** win as well as a size win: the autoregressive decode is memory-bandwidth bound, so the smaller quantized weights run up to about 2.2x faster than F32 on CPU. F16 through q5_0 reproduce the reference transcript exactly (greedy argmax is robust to the small weight noise); q4_k/q4_0 are word-for-word identical with a hair of timestamp drift. Prebuilt GGUFs are published at [mudler/moss-transcribe.cpp-gguf](https://huggingface.co/mudler/moss-transcribe.cpp-gguf).
 
 ---
