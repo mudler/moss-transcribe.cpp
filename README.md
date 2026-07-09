@@ -116,16 +116,18 @@ python3 scripts/convert_moss_transcribe_to_gguf.py models/hf -o models/moss-tran
 
 Only the large `ggml_mul_mat`-fed weights are quantized (the Qwen3 and Whisper attention/FFN projections, the adaptor linears, and the token embedding, 343 tensors). Norms, biases, the conv stem, positional embeddings, and the mel filterbank stay F32. Size and accuracy on the JFK sample (CPU, greedy):
 
-| dtype | size | vs f32 | transcript vs reference |
-| ----- | ---- | ------ | ----------------------- |
-| f32   | 3.4 GB | 100% | byte-identical (the parity gate) |
-| f16   | 1.8 GB | 50%  | byte-identical |
-| q8_0  | 942 MB | 27%  | byte-identical |
-| q6_k  | 733 MB | 21%  | byte-identical |
-| q5_k  | 619 MB | 18%  | byte-identical |
-| q4_k  | 511 MB | 15%  | word-identical (one timestamp off by 0.02 s) |
+| dtype | size | vs f32 | wall (11 s, 8 threads) | speed vs f32 | transcript vs reference |
+| ----- | ---- | ------ | ---------------------- | ------------ | ----------------------- |
+| f32   | 3.4 GB | 100% | 7.83 s | 1.0x | byte-identical (the parity gate) |
+| f16   | 1.8 GB | 50%  | 4.96 s | 1.6x | byte-identical |
+| q8_0  | 942 MB | 27%  | 3.97 s | 2.0x | byte-identical |
+| q6_k  | 733 MB | 21%  | 4.16 s | 1.9x | byte-identical |
+| q5_k  | 619 MB | 18%  | 4.47 s | 1.8x | byte-identical |
+| q5_0  | 619 MB | 18%  | 3.81 s | 2.1x | byte-identical |
+| q4_k  | 511 MB | 15%  | 3.81 s | 2.1x | word-identical (one timestamp off 0.02 s) |
+| q4_0  | 511 MB | 15%  | 3.57 s | 2.2x | word-identical (one timestamp off 0.07 s) |
 
-F16 through q5_k reproduce the reference transcript exactly (greedy argmax is robust to the small weight noise); q4_k is word-for-word identical with a hair of timestamp drift. The GGUFs will be published to [mudler/moss-transcribe.cpp-gguf](https://huggingface.co/mudler/moss-transcribe.cpp-gguf).
+Quantization is a **speed** win as well as a size win: the autoregressive decode is memory-bandwidth bound, so the smaller quantized weights run up to about 2.2x faster than F32 on CPU. F16 through q5_0 reproduce the reference transcript exactly (greedy argmax is robust to the small weight noise); q4_k/q4_0 are word-for-word identical with a hair of timestamp drift. Prebuilt GGUFs are published at [mudler/moss-transcribe.cpp-gguf](https://huggingface.co/mudler/moss-transcribe.cpp-gguf).
 
 ---
 
