@@ -9,6 +9,7 @@
 #include "model_loader.hpp"
 
 #include <string>
+#include <vector>
 
 namespace mt {
 
@@ -16,6 +17,13 @@ namespace mt {
 // full pipeline, and returns the decoded transcript text (trailing EOS dropped,
 // whitespace stripped). Returns an empty string on error.
 std::string transcribe_wav(ModelLoader& m, const std::string& wav_path, int max_new);
+
+// Transcribe already-decoded 16 kHz mono float PCM. Runs the audio front end,
+// prompt/fusion, greedy generation and detokenization -- the shared core behind
+// both transcribe_wav and the C-API PCM entry point. `samples` MUST already be
+// 16 kHz mono. Returns an empty string on error.
+std::string transcribe_pcm16k(ModelLoader& m, const std::vector<float>& samples,
+                              int max_new);
 
 }  // namespace mt
 
