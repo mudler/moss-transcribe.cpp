@@ -45,6 +45,8 @@ set(MT_SRC
   src/generate.cpp
   src/audio_encoder.cpp
   src/transcribe.cpp
+  src/transcript_parser.cpp
+  src/subtitle.cpp
   src/moss_transcribe_capi.cpp
 )
 if(MT_SHARED)

@@ -1,6 +1,7 @@
 #include "moss_transcribe.h"
 #include "model_loader.hpp"
 #include "transcribe.hpp"
+#include "subtitle.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -32,16 +33,25 @@ static int cmd_info(int argc, char** argv) {
 static int cmd_transcribe(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr,
-            "usage: moss-transcribe transcribe <model.gguf> <audio.wav> [--max-new N]\n");
+            "usage: moss-transcribe transcribe <model.gguf> <audio.wav> "
+            "[--max-new N] [--format text|srt|ass|json]\n");
         return 2;
     }
     const char* gguf = argv[2];
     const char* wav  = argv[3];
     int max_new = -1;  // resolved from config below if not overridden
+    std::string format = "text";
     for (int i = 4; i < argc; ++i) {
         if (std::strcmp(argv[i], "--max-new") == 0 && i + 1 < argc) {
             max_new = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--format") == 0 && i + 1 < argc) {
+            format = argv[++i];
         }
+    }
+    if (format != "text" && format != "srt" && format != "ass" && format != "json") {
+        std::fprintf(stderr, "unknown --format '%s' (want text|srt|ass|json)\n",
+                     format.c_str());
+        return 2;
     }
     mt::ModelLoader m;
     if (!m.load(gguf)) { std::fprintf(stderr, "load failed\n"); return 1; }
@@ -52,7 +62,22 @@ static int cmd_transcribe(int argc, char** argv) {
     }
     std::string text = mt::transcribe_wav(m, wav, max_new);
     if (text.empty()) { std::fprintf(stderr, "transcription failed\n"); return 1; }
-    std::printf("%s\n", text.c_str());
+
+    if (format == "text") {
+        // Byte-identical to the historical raw output.
+        std::printf("%s\n", text.c_str());
+    } else if (format == "json") {
+        // Raw parsed segments (no timing normalization).
+        auto segs = mt::subtitle_segments_from_transcript(text, /*postprocess=*/false);
+        std::string out = mt::to_json(segs);
+        std::fwrite(out.data(), 1, out.size(), stdout);
+    } else {
+        // srt / ass: normalize (merge/split/overlap) then export.
+        auto segs = mt::subtitle_segments_from_transcript(text, /*postprocess=*/true);
+        std::string out = (format == "srt") ? mt::to_srt(segs)
+                                            : mt::to_ass(segs);
+        std::fwrite(out.data(), 1, out.size(), stdout);
+    }
     return 0;
 }
 
