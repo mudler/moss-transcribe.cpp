@@ -18,3 +18,6 @@ set_tests_properties(test_whisper_encoder PROPERTIES LABELS "model")
 
 mt_add_test(test_audio_adaptor)
 set_tests_properties(test_audio_adaptor PROPERTIES LABELS "model")
+
+mt_add_test(test_audio_path_e2e)
+set_tests_properties(test_audio_path_e2e PROPERTIES LABELS "model")
