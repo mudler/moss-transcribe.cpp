@@ -71,6 +71,15 @@ int main() {
                "export_json");
     }
 
+    // Integer-valued timestamps >= 10 must render like Python json.dumps
+    // (60.0 / 132.0, never 6e+01) -- regression lock for fmt_json_number.
+    {
+        std::string t = mt::to_json({{"seg_0001", 60, 132, "S01", "x"}});
+        expect(has(t, "\"start\": 60.0") && has(t, "\"end\": 132.0") &&
+                   !has(t, "e+0") && !has(t, "E+0"),
+               "export_json_integer_timestamps");
+    }
+
     if (g_fail) { std::fprintf(stderr, "%d test(s) failed\n", g_fail); return 1; }
     std::printf("all subtitle_export tests passed\n");
     return 0;

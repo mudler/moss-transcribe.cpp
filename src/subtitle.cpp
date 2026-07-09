@@ -236,18 +236,28 @@ std::vector<SubtitleSegment> split_long_segments(const std::vector<SubtitleSegme
 
 // ---- number / time formatting ---------------------------------------------
 std::string fmt_json_number(double v) {
-    // Mirror Python json.dumps(float) == repr(float): shortest round-trip.
+    // Mirror Python json.dumps(float) == repr(float): the shortest decimal that
+    // round-trips. Python renders the [1e-4, 1e16) magnitude range in FIXED
+    // notation (all timestamps live here), and only uses scientific outside it.
+    // A plain "%.*g" would switch to scientific for integer values >= 10
+    // (10.0 -> "1e+01"), which is NOT what json.dumps emits.
     char buf[64];
-    for (int prec = 1; prec <= 17; ++prec) {
-        std::snprintf(buf, sizeof(buf), "%.*g", prec, v);
-        if (std::strtod(buf, nullptr) == v) break;
+    if (v == 0.0) return std::signbit(v) ? "-0.0" : "0.0";
+    const double av = std::fabs(v);
+    if (av >= 1e16 || av < 1e-4) {
+        for (int prec = 1; prec <= 17; ++prec) {
+            std::snprintf(buf, sizeof(buf), "%.*g", prec, v);
+            if (std::strtod(buf, nullptr) == v) break;
+        }
+        return std::string(buf);  // Python uses scientific here too.
     }
-    std::string s(buf);
-    // Ensure it reads as a float (json.dumps renders 2.0 not 2).
-    if (s.find_first_of(".eEnN") == std::string::npos) {
-        s += ".0";
+    // Fixed notation: shortest decimal places (>= 1, so floats keep the ".0")
+    // that round-trip exactly.
+    for (int dec = 1; dec <= 17; ++dec) {
+        std::snprintf(buf, sizeof(buf), "%.*f", dec, v);
+        if (std::strtod(buf, nullptr) == v) return std::string(buf);
     }
-    return s;
+    return std::string(buf);
 }
 
 std::string json_escape(const std::string& s) {
