@@ -27,3 +27,6 @@ set_tests_properties(test_tokenizer PROPERTIES LABELS "model")
 
 mt_add_test(test_audio_span)
 set_tests_properties(test_audio_span PROPERTIES LABELS "model")
+
+mt_add_test(test_qwen3_decoder)
+set_tests_properties(test_qwen3_decoder PROPERTIES LABELS "model")
