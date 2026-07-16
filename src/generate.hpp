@@ -17,6 +17,15 @@
 
 namespace mt {
 
+// Dequantize the rows of token_embd (`tok`, ne=[hidden, vocab]) selected by
+// `ids` into F32, out[p*hidden + h] = feature h of ids[p]. Works for ANY
+// token_embd type (F32, F16, Q8_0, K-quants). Runs a ggml_get_rows graph on
+// the active backend when it supports the op; otherwise (e.g. CUDA has no
+// K-quant get_rows kernels) falls back to a host-side per-row copy + dequant
+// with identical results. Returns false on failure.
+bool embed_rows_f32(struct ggml_tensor* tok, const int32_t* ids, int n_ids,
+                    int hidden, std::vector<float>* out);
+
 // Fetch the embedding of token id `t` = column t of token_embd.weight
 // (ne=[hidden,vocab]) -> [hidden]. Returns empty on error.
 std::vector<float> embed_token(ModelLoader& m, int32_t t, int hidden);

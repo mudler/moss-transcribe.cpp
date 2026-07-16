@@ -5,20 +5,59 @@
 #include "ggml_extend.hpp"
 
 #include "ggml-backend.h"
+#include "ggml.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <mutex>
 
 namespace mt {
 
-// Dequantize `n_ids` rows of token_embd via ggml_get_rows. Works for ANY
-// token_embd type (F32, F16, Q8_0, K-quants): get_rows always returns F32
-// rows. For an F32 token_embd this is bit-identical to a raw column copy.
-// token_embd ne=[hidden, vocab]; result is [hidden, n_ids] laid out
-// feature-fastest, so out[p*hidden + h] is feature h of ids[p]. Returns
-// false on failure (out is left empty by the caller on failure).
-static bool get_rows_f32(struct ggml_tensor* tok, const int32_t* ids,
-                         int n_ids, int hidden, std::vector<float>* out) {
+// Host-side fallback for embed_rows_f32: fetch each selected row's raw bytes
+// from the (possibly device) weight buffer via ggml_backend_tensor_get and
+// dequantize on the CPU with the type's to_float trait. This is the reference
+// dequantization, so results match the get_rows graph path. Needed because
+// ggml's GPU backends implement GET_ROWS only for a subset of quant types
+// (CUDA has no K-quant get_rows kernels as of ggml 0.15) and submitting the
+// op anyway GGML_ABORTs the whole process (mudler/LocalAI#10862).
+static bool embed_rows_f32_host(struct ggml_tensor* tok, const int32_t* ids,
+                                int n_ids, int hidden,
+                                std::vector<float>* out) {
+    const ggml_type type = tok->type;
+    const ggml_type_traits* traits = ggml_get_type_traits(type);
+    if (type != GGML_TYPE_F32 && (!traits || !traits->to_float)) {
+        MT_LOGE("embed_rows_f32_host: no to_float for type %s",
+                ggml_type_name(type));
+        return false;
+    }
+    if (!tok->buffer) {
+        MT_LOGE("embed_rows_f32_host: token_embd has no buffer");
+        return false;
+    }
+    // The flat per-row offset math below needs dense rows.
+    const size_t row_bytes = ggml_row_size(type, tok->ne[0]);
+    if (tok->nb[1] != row_bytes) {
+        MT_LOGE("embed_rows_f32_host: token_embd rows are not dense");
+        return false;
+    }
+    out->resize((size_t)n_ids * (size_t)hidden);
+    std::vector<uint8_t> raw(row_bytes);
+    for (int p = 0; p < n_ids; ++p) {
+        ggml_backend_tensor_get(tok, raw.data(), (size_t)ids[p] * row_bytes,
+                                row_bytes);
+        float* dst = out->data() + (size_t)p * (size_t)hidden;
+        if (type == GGML_TYPE_F32) {
+            std::memcpy(dst, raw.data(), (size_t)hidden * sizeof(float));
+        } else {
+            traits->to_float(raw.data(), dst, hidden);
+        }
+    }
+    return true;
+}
+
+bool embed_rows_f32(struct ggml_tensor* tok, const int32_t* ids,
+                    int n_ids, int hidden, std::vector<float>* out) {
     if (!tok || !ids || n_ids <= 0 || hidden <= 0 || !out) return false;
 
     const size_t max_nodes = 8;
@@ -33,6 +72,19 @@ static bool get_rows_f32(struct ggml_tensor* tok, const int32_t* ids,
     ggml_set_input(idt);
     struct ggml_tensor* rows = ggml_get_rows(ctx, tok, idt);  // [hidden, n_ids] F32
     ggml_set_output(rows);
+
+    // GPU backends support GET_ROWS only for a subset of src types (ggml's
+    // CUDA backend aborts on K-quants), so ask first and dequantize the rows
+    // on the host when the op can't run on the active backend.
+    if (!ggml_backend_supports_op(backend(), rows)) {
+        static std::once_flag warn_once;
+        std::call_once(warn_once, [&] {
+            MT_LOGW("embed lookup: %s GET_ROWS unsupported on %s backend, "
+                    "using host-side dequant",
+                    ggml_type_name(tok->type), backend_name());
+        });
+        return embed_rows_f32_host(tok, ids, n_ids, hidden, out);
+    }
 
     ggml_cgraph* gf = ggml_new_graph(ctx);
     ggml_build_forward_expand(gf, rows);
@@ -83,7 +135,7 @@ std::vector<float> fuse_embeds(ModelLoader& m,
     // 1) Embed lookup via ggml_get_rows: dequantizes rows for ANY token_embd
     //    type (F32/F16/quant) and returns F32 rows [hidden, seq]. On an F32
     //    token_embd this is bit-identical to the old raw column copy.
-    if (!get_rows_f32(tok, input_ids.data(), (int)seq, hidden, &out)) {
+    if (!embed_rows_f32(tok, input_ids.data(), (int)seq, hidden, &out)) {
         MT_LOGE("fuse_embeds: get_rows lookup failed");
         out.clear();
         return out;
@@ -128,7 +180,7 @@ std::vector<float> embed_token(ModelLoader& m, int32_t t, int hidden) {
     // Single-row lookup via ggml_get_rows: dequantizes for ANY token_embd type
     // (F32/F16/quant), F32 result [hidden]. Bit-identical to the old raw read
     // on an F32 token_embd.
-    if (!get_rows_f32(tok, &t, 1, hidden, &out)) {
+    if (!embed_rows_f32(tok, &t, 1, hidden, &out)) {
         MT_LOGE("embed_token: get_rows lookup failed for id %d", (int)t);
         out.clear();
     }
