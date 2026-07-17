@@ -37,6 +37,10 @@ set_tests_properties(test_fusion PROPERTIES LABELS "model")
 mt_add_test(test_generate_e2e)
 set_tests_properties(test_generate_e2e PROPERTIES LABELS "model")
 
+# Embed lookup vs reference dequant for all token_embd types (LocalAI#10862
+# CUDA K-quant GET_ROWS regression) -- model-INDEPENDENT (no LABELS "model").
+mt_add_test(test_embed_lookup)
+
 # M6: subtitle + diarization export -- model-INDEPENDENT (no LABELS "model").
 mt_add_test(test_transcript_parser)
 mt_add_test(test_subtitle_postprocess)
